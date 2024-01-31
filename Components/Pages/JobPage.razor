@@ -1,0 +1,283 @@
+﻿@page "/jobs"
+
+@using TimeScheduling.Data.Models
+@using TimeScheduling.Services
+@inject JobService JobService
+@inject NavigationManager NavigationManager
+
+@rendermode InteractiveServer
+
+<AuthorizeView>
+<div class="d-flex justify-content-between mb-4">
+    <h3>Darbų planavimas</h3>
+    <button class="btn btn-success" @onclick="NavigateToCreateJobForm">Pridėti veiklą</button>
+</div>
+<div class="mb-4">
+    <input type="text" class="form-control" @bind="searchQuery" placeholder="Ieškoti..." @oninput="ApplyFilters"/>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Darbų statistika</h5>
+                <p class="card-text">Iš viso darbų: @jobs.Count</p>
+                <p class="card-text">Vidutinė darbo trukmė: @CalculateAverageJobDuration(jobs)</p>
+                <p class="card-text">Vykstantys darbai: @GetTotalInProgressJobs()</p>
+                <p class="card-text">Įvyksiantys darbai: @GetTotalPendingJobs()</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<table class="table table-striped py-5 px-5 border">
+    <thead class="table-dark border-secondary">
+    <tr>
+        <th scope="col">Nr.</th>
+        <th scope="col">Pavadinimas</th>
+        <th scope="col">Aprašas</th>
+        <th scope="col">Pradžios data</th>
+        <th scope="col">Pabaigos data</th>
+        <th scope="col">Veiksmai</th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr class="border border-secondary">
+        <td>
+        </td>
+        <td>
+            <input type="text" class="form-control mb-2" @bind="filterTitle" placeholder="Pavadinimas" @oninput="ApplyFilters"/>
+        </td>
+        <td>
+            <input type="text" class="form-control mb-2" @bind="filterDescription" placeholder="Aprašymas" @oninput="ApplyFilters"/>
+        </td>
+        <td>
+            <input type="datetime-local" class="form-control mb-2" @bind="filterStartDate" @oninput="ApplyFilters"/>
+        </td>
+        <td>
+            <input type="datetime-local" class="form-control mb-2" @bind="filterEndDate" @oninput="ApplyFilters"/>
+        </td>
+        <td>
+            <button class="btn btn-primary mb-2" @onclick="ApplyFilters">Filtruoti</button>
+        </td>
+    </tr>
+    @foreach (var job in jobs)
+    {
+        <tr>
+            <td>@job.Id</td>
+            <td>@job.Title</td>
+            <td>@job.Description</td>
+            <td>@job.StartDate.ToLongDateString()</td>
+            <td>@job.EndDate.ToLongDateString()</td>
+            <td>
+                <a href="/edit-job/@job.Id" class="btn btn-primary">Redaguoti</a>
+                <button class="btn btn-danger" @onclick="() => ShowDeleteConfirmationModal(job)">Ištrinti</button>
+                <button class="btn btn-secondary" @onclick="() => PreviewJob(job)">Peržiūrėti</button>
+            </td>
+        </tr>
+    }
+    </tbody>
+</table>
+
+@if (showJobModal)
+{
+    <div class="modal fade show" tabindex="-1" role="dialog" style="display: block;  backdrop-filter: blur(5px); background-color: rgba(0, 0, 0, 0.5);">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@modalTitle</h5>
+                    <button type="button" class="btn-close" data-dismiss="modal" @onclick="CloseJobModal">
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-1">
+                        <strong>Identifikacijos numeris.:</strong> @selectedJob.Id
+                    </div>
+                    <div class="mb-1">
+                        <strong>Pavadinimas:</strong> @selectedJob.Title
+                    </div>
+                    <div class="mb-1">
+                        <strong>Aprašymas:</strong> @selectedJob.Description
+                    </div>
+                    <div class="mb-1">
+                        <strong>Pradžios data:</strong> @selectedJob.StartDate.ToLongDateString()
+                    </div>
+                    <div class="mb-1">
+                        <strong>Pabaigos data:</strong> @selectedJob.EndDate.ToLongDateString()
+                    </div>
+                    <h4>Priskirti darbuotojai:</h4>
+                    <table class="table border-2">
+                        <thead>
+                        <tr>
+                            <th>Vardas</th>
+                            <th>Apskaičiuota alga:</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        @foreach (var employee in assignedEmployees)
+                        {
+                            <tr>
+                                <td>@employee.Name</td>
+                                <td>@CalculateSalary(employee, selectedJob.StartDate, selectedJob.EndDate)</td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseJobModal">Uždaryti</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+@if (showDeleteConfirmationModal)
+{
+    <div class="modal fade show" tabindex="-1" role="dialog" style="display: block;  backdrop-filter: blur(5px); background-color: rgba(0, 0, 0, 0.5);">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Patvirtinti trynimą</h5>
+                    <button type="button" class="btn-close" data-dismiss="modal" @onclick="CloseDeleteConfirmationModal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Ar tikrai norite ištrinti šį darbą?</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseDeleteConfirmationModal">Atšaukti</button>
+                    <button type="button" class="btn btn-danger" @onclick="DeleteJobConfirmation">Ištrinti</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+</AuthorizeView>
+@code {
+    private List<Job> jobs;
+    private Job selectedJob;
+    private bool showJobModal = false;
+    private string modalTitle = "";
+    private List<Employee> assignedEmployees = new List<Employee>();
+    private List<Job> filteredJobs;
+    private string filterTitle = "";
+    private string filterDescription = "";
+    private DateTime? filterStartDate = null;
+    private DateTime? filterEndDate = null;
+    private string searchQuery = "";
+    private bool showDeleteConfirmationModal = false;
+    private Job jobToDelete;
+    [Inject] private JobService jobService { get; set; }
+
+    private void ShowDeleteConfirmationModal(Job job)
+    {
+        jobToDelete = job;
+        showDeleteConfirmationModal = true;
+    }
+
+    private void CloseDeleteConfirmationModal()
+    {
+        showDeleteConfirmationModal = false;
+    }
+
+    private async Task DeleteJobConfirmation()
+    {
+        if (jobToDelete != null)
+        {
+            await DeleteJob(jobToDelete.Id);
+            showDeleteConfirmationModal = false;
+        }
+    }
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadJobsAsync();
+    }
+
+    private async Task DeleteJob(int id)
+    {
+        await jobService.DeleteJobAsync(id);
+        await LoadJobsAsync();
+    }
+
+    private void NavigateToCreateJobForm()
+    {
+        NavigationManager.NavigateTo("/create-job");
+    }
+
+    private void CloseJobModal()
+    {
+        showJobModal = false;
+    }
+
+    private async Task PreviewJob(Job job)
+    {
+        modalTitle = "Darbo peržiūra";
+        selectedJob = job;
+        showJobModal = true;
+
+        assignedEmployees = await jobService.GetEmployeesAssignedToJobAsync(job.Id);
+    }
+
+    private async Task LoadJobsAsync()
+    {
+        var allJobs = await jobService.GetJobsAsync();
+
+        filteredJobs = allJobs
+            .Where(job =>
+                (string.IsNullOrEmpty(filterTitle) || job.Title.Contains(filterTitle, StringComparison.OrdinalIgnoreCase)) &&
+                (string.IsNullOrEmpty(filterDescription) || job.Description.Contains(filterDescription, StringComparison.OrdinalIgnoreCase)) &&
+                (!filterStartDate.HasValue || job.StartDate.Date >= filterStartDate.Value.Date) &&
+                (!filterEndDate.HasValue || job.EndDate.Date <= filterEndDate.Value.Date) &&
+                (string.IsNullOrEmpty(searchQuery) ||
+                 job.Title.Contains(searchQuery, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+
+        jobs = filteredJobs;
+    }
+
+    private void ApplyFilters()
+    {
+        LoadJobsAsync();
+    }
+
+    private decimal CalculateSalary(Employee employee, DateTime startDate, DateTime endDate)
+    {
+        TimeSpan timeWorked = endDate - startDate;
+        double hoursWorked = timeWorked.TotalHours;
+
+        if (decimal.TryParse(employee.SalaryRate, out decimal salaryRate))
+        {
+            decimal totalSalary = salaryRate * (decimal)hoursWorked;
+            return totalSalary;
+        }
+        else
+        {
+            return 0.0M;
+        }
+    }
+
+    private string CalculateAverageJobDuration(List<Job> jobList)
+    {
+        if (jobList.Count == 0)
+        {
+            return "N/A";
+        }
+
+        double totalDuration = jobList.Average(job => (job.EndDate - job.StartDate).TotalDays);
+        return $"{totalDuration:F2} dienos";
+    }
+
+    private int GetTotalPendingJobs()
+    {
+        return jobs.Count(job => DateTime.Now < job.StartDate);
+    }
+    private int GetTotalInProgressJobs()
+    {
+        DateTime currentDate = DateTime.Now;
+        
+        int totalInProgressJobs = jobs.Count(job =>
+            job.StartDate <= currentDate &&
+            job.EndDate >= currentDate);
+
+        return totalInProgressJobs;
+    }
+}

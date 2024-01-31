@@ -1,0 +1,109 @@
+﻿@page "/create-job"
+@using TimeScheduling.Data.Models
+@using TimeScheduling.Services
+@inject JobService JobService
+@inject EmployeeService EmployeeService
+@inject EmployeeJobsService EmployeeJobsService
+
+
+@rendermode InteractiveServer
+
+<h3>Sukurti naują veiklą</h3>
+
+<form @onsubmit="CreateJob">
+    <div class="form-group">
+        <label for="title">Pavadinimas:</label>
+        <input type="text" class="form-control" id="title" @bind="newJob.Title">
+    </div>
+    <div class="form-group">
+        <label for="description">Aprašas:</label>
+        <textarea class="form-control" id="description" @bind="newJob.Description"></textarea>
+    </div>
+    <div class="form-group">
+        <label for="startDate">Pradžios data:</label>
+        <input type="datetime-local" class="form-control" id="startDate" @bind="newJob.StartDate">
+    </div>
+    <div class="form-group">
+        <label for="endDate">Pabaigos data:</label>
+        <input type="datetime-local" class="form-control" id="endDate" @bind="newJob.EndDate">
+    </div>
+    <div class="form-group">
+        <label for="assignedEmployees">Priskirti darbuotojai:</label>
+        <select multiple="multiple" class="form-control" id="assignedEmployees" @onchange="HandleEmployeeSelection">
+            @foreach (var employee in employees)
+            {
+                <option value="@employee.Id" selected="@selectedEmployeeIds.Contains(employee.Id)">@employee.Name</option>
+            }
+        </select>
+    </div>
+    <button type="submit" class="btn btn-primary">Sukurti</button>
+</form>
+
+@code {
+    private Job newJob = new Job();
+    private List<int> selectedEmployeeIds = new List<int>();
+    private List<Employee> employees;
+
+    [Inject] private JobService jobService { get; set; }
+    [Inject] private EmployeeService employeeService { get; set; }
+    [Inject] private NavigationManager NavigationManager { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        employees = await employeeService.GetEmployeesAsync();
+    }
+
+    private async Task CreateJob()
+    {
+
+        try
+        {
+            await jobService.CreateJobAsync(newJob);
+
+            if (newJob.Id > 0 && selectedEmployeeIds.Count > 0)
+            {
+                await EmployeeJobsService.AssignEmployeesToJobAsync(newJob.Id, selectedEmployeeIds);
+            }
+
+            NavigationManager.NavigateTo("/jobs");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error: {ex.Message}");
+            throw;
+        }
+    }
+
+    private void HandleEmployeeSelection(ChangeEventArgs e)
+    {
+        if (e.Value is string[] selectedValues)
+        {
+            selectedEmployeeIds.Clear();
+
+            foreach (var value in selectedValues)
+            {
+                if (int.TryParse(value, out int employeeId))
+                {
+                    selectedEmployeeIds.Add(employeeId);
+                }
+                else
+                {
+                    Console.WriteLine($"Blogas ID: {value}");
+                }
+            }
+        }
+        else if (e.Value is string singleValue)
+        {
+            if (int.TryParse(singleValue, out int employeeId))
+            {
+                selectedEmployeeIds.Clear();
+                selectedEmployeeIds.Add(employeeId);
+            }
+            else
+            {
+                Console.WriteLine($"Blogas ID: {singleValue}");
+            }
+        }
+    }
+
+}

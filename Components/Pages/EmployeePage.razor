@@ -1,0 +1,323 @@
+﻿@page "/employees"
+@using TimeScheduling.Data.Models
+@using TimeScheduling.Services
+@using Microsoft.AspNetCore.Authorization
+@inject EmployeeService employeeService
+
+@attribute [Authorize]
+@rendermode InteractiveServer
+
+<AuthorizeView>
+    <div class="d-flex justify-content-between mb-4">
+        <h3>Darbuotojų sąrašas</h3>
+        <button class="btn btn-success" @onclick="CreateEmployee">Sukurti darbuotoją</button>
+    </div>
+    <div class="mb-4">
+        <p>
+            <strong>Statistika:</strong>
+        </p>
+        <p>Viso darbuotojų: @employees.Count</p>
+        <p>Vidutinė valandinė alga: @CalculateAverageSalaryRate()</p>
+        <p>Aukščiausia valandinė alga: @GetHighestSalaryRate()</p>
+        <p>Žemiausia valandinė alga: @GetLowestSalaryRate()</p>
+    </div>
+    <div class="d-flex justify-content-between mb-4">
+        <input type="text" class="form-control" placeholder="Ieškoti" @bind="searchQuery"/>
+        <button class="btn btn-primary btn-sm" @onclick="SearchEmployees">Ieškoti</button>
+    </div>
+    <table class="table table-striped py-5 px-5 border">
+        <thead class="table-dark border-secondary">
+        <tr>
+            <th scope="col">Nr.</th>
+            <th scope="col">Vardas ir Pavardė</th>
+            <th scope="col">Pareigos</th>
+            <th scope="col">Val. atlyginimas</th>
+            <th scope="col">El. paštas</th>
+            <th scope="col">Tel. nr.</th>
+            <th scope="col">Adresas</th>
+            <th scope="col">Veiksmai</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr class="border border-secondary">
+            <td>
+
+            </td>
+            <td>
+                <input type="text" class="form-control" placeholder="Vardas bei Pavardė" @bind="filters.Name"/>
+            </td>
+            <td>
+                <input type="text" class="form-control" placeholder="Pareigos" @bind="filters.JobTitle"/>
+            </td>
+            <td>
+                <input type="text" class="form-control" placeholder="Valandinė alga" @bind="filters.SalaryRate"/>
+            </td>
+            <td>
+                <input type="text" class="form-control" placeholder="Paštas" @bind="filters.Email"/>
+            </td>
+            <td>
+                <input type="text" class="form-control" placeholder="Tel. numeris" @bind="filters.Phone"/>
+            </td>
+            <td>
+                <input type="text" class="form-control" placeholder="Adresas" @bind="filters.Address"/>
+            </td>
+            <td>
+                <button class="btn btn-primary btn-sm" @onclick="FilterEmployees">Filtruoti</button>
+            </td>
+        </tr>
+        @foreach (var employee in pagedEmployees)
+        {
+            <tr>
+                <td>@employee.Id</td>
+                <td>@employee.Name</td>
+                <td>@employee.JobTitle</td>
+                <td>@employee.SalaryRate</td>
+                <td>@employee.Email</td>
+                <td>@employee.Phone</td>
+                <td>@employee.Address</td>
+                <td class="d-inline-flex gap-1">
+                    <button class="btn btn-primary btn-sm" @onclick="() => EditEmployee(employee)">Redaguoti</button>
+                    <button class="btn btn-danger btn-sm" @onclick="() => DeleteEmployee(employee)">Ištrinti</button>
+                </td>
+            </tr>
+        }
+        </tbody>
+    </table>
+
+    @if (showEmployeeModal)
+    {
+        <div class="modal fade show" tabindex="-1" role="dialog" style="display: block;  backdrop-filter: blur(5px); background-color: rgba(0, 0, 0, 0.5);">
+            <div class="modal-dialog" role="document">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">@modalTitle</h5>
+                        <button type="button" class="btn-close" data-dismiss="modal" @onclick="CloseEmployeeModal">
+                        </button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="form-group">
+                            <label for="employeeName">Vardas bei Pavardė:</label>
+                            <input type="text" class="form-control" id="employeeName" @bind="newEmployee.Name"/>
+                        </div>
+                        <div class="form-group">
+                            <label for="employeeJobTitle">Pareigos:</label>
+                            <input type="text" class="form-control" id="employeeJobTitle" @bind="newEmployee.JobTitle"/>
+                        </div>
+                        <div class="form-group">
+                            <label for="employeeSalaryRate">Val. atlyginimas:</label>
+                            <input type="text" class="form-control" id="employeeSalaryRate" @bind="newEmployee.SalaryRate"/>
+                        </div>
+                        <div class="form-group">
+                            <label for="employeeEmail">El. paštas:</label>
+                            <input type="text" class="form-control" id="employeeEmail" @bind="newEmployee.Email"/>
+                        </div>
+                        <div class="form-group">
+                            <label for="employeePhone">Tel. nr.:</label>
+                            <input type="text" class="form-control" id="employeePhone" @bind="newEmployee.Phone"/>
+                        </div>
+                        <div class="form-group">
+                            <label for="employeeAddress">Adresas:</label>
+                            <input type="text" class="form-control" id="employeeAddress" @bind="newEmployee.Address"/>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="CloseEmployeeModal">Uždaryti</button>
+                        <button type="button" class="btn btn-primary" @onclick="SaveEmployee">Išsaugoti</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+    @if (showConfirmDeleteModal)
+    {
+        <div class="modal fade show" tabindex="-1" role="dialog" style="display: block; backdrop-filter: blur(5px); background-color: rgba(0, 0, 0, 0.5);">
+            <div class="modal-dialog" role="document">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Patvirtinti trynimą</h5>
+                        <button type="button" class="btn-close" data-dismiss="modal" @onclick="CloseConfirmDeleteModal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p>Ar tikrai norite ištrinti šį darbuotoją?</p>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="CloseConfirmDeleteModal">Atšaukti</button>
+                        <button type="button" class="btn btn-danger" @onclick="ConfirmDeleteEmployee">Ištrinti</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+</AuthorizeView>
+
+@code {
+    private List<Employee> employees;
+    private List<Employee> pagedEmployees = new List<Employee>();
+    private Employee newEmployee;
+    private Employee editingEmployee;
+    private string modalTitle = "";
+    private string searchQuery = "";
+    private bool showEmployeeModal = false;
+    private bool showConfirmDeleteModal = false;
+
+    private class EmployeeFilters
+    {
+        public string Name { get; set; }
+        public string JobTitle { get; set; }
+        public string SalaryRate { get; set; }
+        public string Email { get; set; }
+        public string Phone { get; set; }
+        public string Address { get; set; }
+    }
+
+    private EmployeeFilters filters = new EmployeeFilters();
+
+    private void FilterEmployees()
+    {
+        pagedEmployees = employees
+            .Where(employee =>
+                (string.IsNullOrWhiteSpace(filters.Name) || employee.Name.Contains(filters.Name, StringComparison.OrdinalIgnoreCase)) &&
+                (string.IsNullOrWhiteSpace(filters.JobTitle) || employee.JobTitle.Contains(filters.JobTitle, StringComparison.OrdinalIgnoreCase)) &&
+                (string.IsNullOrWhiteSpace(filters.SalaryRate) || employee.SalaryRate.Contains(filters.SalaryRate, StringComparison.OrdinalIgnoreCase)) &&
+                (string.IsNullOrWhiteSpace(filters.Email) || employee.Email.Contains(filters.Email, StringComparison.OrdinalIgnoreCase)) &&
+                (string.IsNullOrWhiteSpace(filters.Phone) || employee.Phone.Contains(filters.Phone, StringComparison.OrdinalIgnoreCase)) &&
+                (string.IsNullOrWhiteSpace(filters.Address) || employee.Address.Contains(filters.Address, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+    }
+
+    private void SearchEmployees()
+    {
+        var searchQuery = this.searchQuery.Trim().ToLower();
+
+        pagedEmployees = employees
+            .Where(employee =>
+                employee.Name.ToLower().Contains(searchQuery) ||
+                employee.JobTitle.ToLower().Contains(searchQuery) ||
+                employee.SalaryRate.ToLower().Contains(searchQuery) ||
+                employee.Email.ToLower().Contains(searchQuery) ||
+                employee.Phone.ToLower().Contains(searchQuery) ||
+                employee.Address.ToLower().Contains(searchQuery))
+            .ToList();
+    }
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        employees = await employeeService.GetEmployeesAsync();
+        FilterEmployees();
+    }
+
+    private void EditEmployee(Employee employee)
+    {
+        modalTitle = "Redaguoti darbuotoją";
+        editingEmployee = employee;
+        newEmployee = new Employee
+        {
+            Id = employee.Id,
+            Name = employee.Name,
+            JobTitle = employee.JobTitle,
+            SalaryRate = employee.SalaryRate,
+            Email = employee.Email,
+            Phone = employee.Phone,
+            Address = employee.Address
+        };
+
+        showEmployeeModal = true;
+    }
+
+
+    private async Task SaveEmployee()
+    {
+        Console.WriteLine("SaveEmployee method called"); 
+
+        if (editingEmployee == null || editingEmployee.Id == 0)
+        {
+            await employeeService.CreateEmployeeAsync(newEmployee);
+        }
+        else
+        {
+            await employeeService.UpdateEmployeeAsync(editingEmployee);
+        }
+
+        CloseEmployeeModal();
+        employees = await employeeService.GetEmployeesAsync();
+        FilterEmployees();
+    }
+
+
+    private void CreateEmployee()
+    {
+        modalTitle = "Pridėti darbuotoją į sąrašą";
+        newEmployee = new Employee();
+        showEmployeeModal = true;
+    }
+
+    private void CloseEmployeeModal()
+    {
+        showEmployeeModal = false;
+    }
+
+    private void DeleteEmployee(Employee employee)
+    {
+        editingEmployee = employee;
+        showConfirmDeleteModal = true;
+    }
+
+    private void CloseConfirmDeleteModal()
+    {
+        showConfirmDeleteModal = false;
+    }
+
+    private async Task ConfirmDeleteEmployee()
+    {
+        if (editingEmployee != null)
+        {
+            await employeeService.DeleteEmployeeAsync(editingEmployee.Id);
+            employees = await employeeService.GetEmployeesAsync();
+            FilterEmployees();
+        }
+
+        showConfirmDeleteModal = false;
+    }
+
+    private string CalculateAverageSalaryRate()
+    {
+        if (pagedEmployees.Count == 0)
+        {
+            return "N/A";
+        }
+
+        decimal totalSalaryRate = pagedEmployees
+            .Where(employee => !string.IsNullOrEmpty(employee.SalaryRate))
+            .Select(employee => decimal.Parse(employee.SalaryRate))
+            .Average();
+
+        return totalSalaryRate.ToString("0.00");
+    }
+
+    private string GetHighestSalaryRate()
+    {
+        var employeeWithHighestSalary = pagedEmployees
+            .Where(employee => !string.IsNullOrEmpty(employee.SalaryRate))
+            .OrderByDescending(employee => decimal.Parse(employee.SalaryRate))
+            .FirstOrDefault();
+
+        return employeeWithHighestSalary != null
+            ? employeeWithHighestSalary.SalaryRate
+            : "N/A";
+    }
+
+    private string GetLowestSalaryRate()
+    {
+        var employeeWithLowestSalary = pagedEmployees
+            .Where(employee => !string.IsNullOrEmpty(employee.SalaryRate))
+            .OrderBy(employee => decimal.Parse(employee.SalaryRate))
+            .FirstOrDefault();
+
+        return employeeWithLowestSalary != null
+            ? employeeWithLowestSalary.SalaryRate
+            : "N/A";
+    }
+}
+

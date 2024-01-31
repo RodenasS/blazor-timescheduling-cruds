@@ -1,0 +1,114 @@
+﻿@page "/edit-job/{JobId:int}"
+@using Microsoft.AspNetCore.Components
+@using TimeScheduling.Data.Models
+@using TimeScheduling.Services
+
+@rendermode InteractiveServer
+
+<h3>Edit Job</h3>
+
+@if (job != null)
+{
+    <form @onsubmit="UpdateJob">
+        <div class="form-group">
+            <label for="title">Pavadinimas:</label>
+            <input type="text" class="form-control" id="title" @bind="job.Title">
+        </div>
+        <div class="form-group">
+            <label for="description">Aprašymas:</label>
+            <textarea class="form-control" id="description" @bind="job.Description"></textarea>
+        </div>
+        <div class="form-group">
+            <label for="startDate">Pradžios data:</label>
+            <input type="datetime-local" class="form-control" id="startDate" @bind="job.StartDate">
+        </div>
+        <div class="form-group">
+            <label for="endDate">Pabaigos data:</label>
+            <input type="datetime-local" class="form-control" id="endDate" @bind="job.EndDate">
+        </div>
+        <div class="form-group">
+            <label for="assignedEmployees">Priskirti darbuotojai:</label>
+            <select multiple="multiple" class="form-control" id="assignedEmployees" @onchange="HandleEmployeeSelection">
+                @foreach (var employee in employees)
+                {
+                    <option value="@employee.Id" selected="@selectedEmployeeIds.Contains(employee.Id)">@employee.Name</option>
+                }
+            </select>
+        </div>
+        <button type="submit" class="btn btn-primary">Atnaujinti veiklą</button>
+    </form>
+}
+else
+{
+    <p>Veikla nerasta.</p>
+}
+
+@code {
+    [Parameter] public int JobId { get; set; }
+    private Job job;
+    private List<int> selectedEmployeeIds = new List<int>();
+    private List<Employee> employees;
+
+    [Inject] protected JobService JobService { get; set; }
+    [Inject] protected EmployeeService EmployeeService { get; set; }
+    [Inject] protected NavigationManager NavigationManager { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        job = await JobService.GetJobByIdAsync(JobId);
+        employees = await EmployeeService.GetEmployeesAsync();
+
+        if (job != null)
+        {
+            var assignedEmployees = await JobService.GetEmployeesAssignedToJobAsync(JobId);
+            selectedEmployeeIds.AddRange(assignedEmployees.Select(e => e.Id)); 
+        }
+    }
+
+    private async Task UpdateJob()
+    {
+        if (job != null)
+        {
+            await JobService.UpdateJobAsync(job);
+
+            if (selectedEmployeeIds.Count > 0)
+            {
+                await JobService.AssignEmployeesToJobAsync(job.Id, selectedEmployeeIds);
+            }
+            NavigationManager.NavigateTo("/jobs");
+        }
+    }
+
+
+    private void HandleEmployeeSelection(ChangeEventArgs e)
+    {
+        if (e.Value is string[] selectedValues)
+        {
+            selectedEmployeeIds.Clear();
+
+            foreach (var value in selectedValues)
+            {
+                if (int.TryParse(value, out int employeeId))
+                {
+                    selectedEmployeeIds.Add(employeeId);
+                }
+                else
+                {
+                    Console.WriteLine($"Blogas ID: {value}");
+                }
+            }
+        }
+        else if (e.Value is string singleValue)
+        {
+            if (int.TryParse(singleValue, out int employeeId))
+            {
+                selectedEmployeeIds.Clear();
+                selectedEmployeeIds.Add(employeeId);
+            }
+            else
+            {
+                Console.WriteLine($"Blogas ID: {singleValue}");
+            }
+        }
+    }
+}
